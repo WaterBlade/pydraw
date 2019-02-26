@@ -3,7 +3,20 @@ from typing import Union, List
 
 
 class Entity:
-    pass
+    def scale(self, x, y, factor):
+        pass
+
+    def move(self, x, y):
+        pass
+
+    def scale_by_reset_unit(self, factor):
+        self.scale(0, 0, factor)
+
+    def scale_by_reset_scale(self, factor):
+        pass
+
+    def scale_by_reset_factor(self, factor):
+        self.scale(0, 0, factor)
 
 
 class Vector:
@@ -252,21 +265,58 @@ class MText(Entity):
 
 
 class Context:
-    def __init__(self, unit='mm'):
+    def __init__(self, unit='mm', scale=1, factor=1):
         self.unit = unit
+        self.scale = scale
+        self.factor = factor
         self.insert_point = Point(0, 0)
         self.entity_list = list()
 
+    def reset_unit(self, unit):
+        if self.unit != unit:
+            if self.unit == 'mm':
+                self.scale_by_reset_unit(1000)
+            elif self.unit == 'm':
+                self.scale_by_reset_unit(0.001)
+            else:
+                raise RuntimeError(f'Unknown unit: {unit}')
+            self.unit = unit
+
+    def reset_scale(self, scale):
+        for entity in self.entity_list:
+            entity.scale_by_reset_scale(scale / self.scale)
+        self.scale = scale
+
+    def reset_factor(self, factor):
+        for entity in self.entity_list:
+            entity.scale_by_reset_factor(factor / self.factor)
+        self.factor = factor
+
     def append(self, entity):
-        assert isinstance(entity, Entity)
+        assert isinstance(entity, Entity) or isinstance(entity, Context)
         self.entity_list.append(entity)
 
     def move(self, x, y):
         self.insert_point.move(x, y)
 
-    def draw_to(self, canvas):
+    def scale_by_reset_unit(self, factor):
+        self.insert_point.scale(0, 0, factor)
         for entity in self.entity_list:
-            entity.move(self.insert_point[0], self.insert_point[1])
+            entity.scale_by_reset_unit(factor)
+
+    def scale_by_reset_scale(self, factor):
+        for entity in self.entity_list:
+            entity.scale_by_reset_scale(factor)
+
+    def scale_by_reset_factor(self, factor):
+        self.insert_point.scale(0, 0, factor)
+        for entity in self.entity_list:
+            entity.scale_by_reset_factor(factor)
+
+    def draw_to(self, canvas):
+        x, y = self.insert_point
+        for entity in self.entity_list:
+            entity.move(x, y)
             entity.draw_to(canvas)
 
     def visit(self, visitor):
@@ -277,60 +327,15 @@ class Context:
 
 
 class Symbol(Context):
-    def visit(self, visitor):
-        visitor.visit_symbol(self)
+    def scale_by_reset_scale(self, factor):
+        for entity in self.entity_list:
+            entity.scale(0, 0, factor)
+
+    def scale_by_reset_factor(self, factor):
+        self.insert_point.scale(0, 0, factor)
 
 
-class Composite(Context):
-    def __init__(self):
-        super().__init__()
-        self.insert_point = Point(0, 0)
-        self.context_list = list()
-
-    def append(self, context):
-        assert isinstance(context, Context)
-        self.context_list.append(context)
-
-    def move(self, x, y):
-        self.insert_point.move(x, y)
-
-    def draw_to(self, canvas):
-        for context in self.context_list:
-            context.move(self.insert_point[0], self.insert_point[0])
-            context.draw_to(canvas)
-
-    def visit(self, visitor):
-        visitor.visit_composite(self)
-
-    def __iter__(self):
-        return iter(self.context_list)
-
-
-# Command
-
-class ResetScale:
-    def __init__(self, old_scale, new_scale):
-        pass
-
-
-class ResetUnit:
-    def __init__(self, old_unit, new_unit):
-        if old_unit == 'mm' and new_unit == 'm':
-            self.factor = 1000
-        elif old_unit == 'm' and new_unit == 'mm':
-            self.factor = 0.001
-
-    def visit_composite(self, composite):
-        for context in composite:
-            context.insert_point.scale(0, 0, self.factor)
-            context.visit(composite)
-
-    def visit_context(self, context):
-        for entity in context:
-            entity.scale(0, 0, self.factor)
-
-    def visit_symbol(self, symbol):
-        for entity in symbol:
-            entity.scale(0, 0, self.factor)
+class Figure:
+    pass
 
 
